@@ -1,0 +1,9 @@
+{
+	"appId": "com.musikcantik.player",
+	"appName": "Musik Cantik Y2K",
+	"webDir": "dist",
+	"bundledWebRuntime": false,
+	"server": {
+		"androidScheme": "https"
+	}
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Play.me - Y2K Glass Music Player",
+  "description": "Pemutar musik Android bernuansa Y2K Glassmorphism dengan pemutar file lokal, animasi GIF/video visualizer, efek blur latar belakang estetik, dan equalizer interaktif.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

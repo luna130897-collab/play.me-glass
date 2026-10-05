@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Musik Cantik Y2K</string>
+    <string name="title_activity_main">Musik Cantik Y2K</string>
+    <string name="package_name">com.musikcantik.player</string>
+    <string name="custom_url_scheme">com.musikcantik.player</string>
+</resources>

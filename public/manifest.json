@@ -1,0 +1,17 @@
+{
+  "short_name": "Play.me",
+  "name": "Play.me - Y2K Glass Music Player",
+  "description": "Pemutar musik Android bernuansa Y2K Glassmorphism dengan pemutar file lokal, animasi GIF visualizer, dan equalizer.",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='25' fill='%23ec4899'/><path d='M38 30 L72 50 L38 70 Z' fill='white'/></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#030303",
+  "theme_color": "#030303",
+  "display": "standalone",
+  "orientation": "portrait"
+}
