@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { playTactileClick } from '../utils/audioSynth';
 import { generateCoverForTrack } from '../utils/coverArt';
+import { searchLyricsComprehensive, LyricsSearchResult, parseLrc } from '../utils/lyricsApi';
 
 interface LyricsVisualViewProps {
   currentTrack: Track | null;
@@ -24,18 +25,6 @@ interface LyricsVisualViewProps {
   onSeek: (time: number) => void;
   onUpdateLyrics?: (trackId: string, plainLyrics?: string, syncedLyrics?: SyncedLyricLine[]) => void;
   onUpdateTrackLyrics?: (trackId: string, lyrics: { plainLyrics?: string; syncedLyrics?: SyncedLyricLine[] }) => void;
-}
-
-interface LrcLibResponseItem {
-  id: number;
-  name?: string;
-  trackName: string;
-  artistName: string;
-  albumName: string;
-  duration: number;
-  instrumental: boolean;
-  plainLyrics?: string;
-  syncedLyrics?: string;
 }
 
 export const LyricsVisualView: React.FC<LyricsVisualViewProps> = ({
@@ -53,7 +42,7 @@ export const LyricsVisualView: React.FC<LyricsVisualViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchStatus, setSearchStatus] = useState<string | null>(null);
-  const [searchResults, setSearchResults] = useState<LrcLibResponseItem[]>([]);
+  const [searchResults, setSearchResults] = useState<LyricsSearchResult[]>([]);
   const [isManualEditOpen, setIsManualEditOpen] = useState(false);
   const [manualText, setManualText] = useState('');
   const [activeIndex, setActiveIndex] = useState<number>(-1);
@@ -64,28 +53,6 @@ export const LyricsVisualView: React.FC<LyricsVisualViewProps> = ({
   const syncedLyrics = currentTrack?.syncedLyrics;
   const plainLyrics = currentTrack?.plainLyrics;
   const legacyLyrics = currentTrack?.lyrics;
-
-  // Helper to parse standard LRC string into array of { time: seconds, text: string }
-  const parseLRC = (lrcString: string): SyncedLyricLine[] => {
-    const lines = lrcString.split('\n');
-    const result: SyncedLyricLine[] = [];
-    const timeReg = /\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\]/g;
-
-    for (const line of lines) {
-      const match = [...line.matchAll(timeReg)];
-      if (match.length > 0) {
-        const text = line.replace(timeReg, '').trim();
-        for (const m of match) {
-          const min = parseInt(m[1], 10);
-          const sec = parseInt(m[2], 10);
-          const ms = m[3] ? parseInt(m[3].padEnd(3, '0').slice(0, 3), 10) : 0;
-          const time = min * 60 + sec + ms / 1000;
-          result.push({ time, text });
-        }
-      }
-    }
-    return result.sort((a, b) => a.time - b.time);
-  };
 
   // Determine active lyric line based on current playback timestamp
   useEffect(() => {
@@ -119,32 +86,41 @@ export const LyricsVisualView: React.FC<LyricsVisualViewProps> = ({
     }
   }, [activeIndex]);
 
-  // Search online lyrics via LRCLIB public open music lyrics API
+  // Search online lyrics using robust multi-source engine (LRCLIB exact get + full-text search + Lyrics.ovh)
   const searchOnlineLyrics = async (title: string, artist?: string) => {
     if (!title.trim()) return;
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setSearchStatus('Perangkat Anda sedang offline. Hubungkan ke internet untuk mencari lirik.');
+      return;
+    }
+
     setIsSearching(true);
-    setSearchStatus('Mencari lirik online di LRCLIB...');
+    setSearchStatus('Mencari lirik sinkron & akurat di database global...');
     setSearchResults([]);
 
     try {
-      const params = new URLSearchParams();
-      params.append('track_name', title);
-      if (artist && artist !== 'Unknown Artist' && artist !== 'Lokal Audio') {
-        params.append('artist_name', artist);
-      }
+      const results = await searchLyricsComprehensive(
+        title,
+        artist,
+        currentTrack?.album,
+        currentTrack?.duration
+      );
 
-      const res = await fetch(`https://lrclib.net/api/search?${params.toString()}`);
-      if (!res.ok) throw new Error('Gagal menghubungi server lirik');
-      const data: LrcLibResponseItem[] = await res.json();
-
-      if (data && data.length > 0) {
-        setSearchResults(data);
-        setSearchStatus(`Ditemukan ${data.length} hasil lirik.`);
+      if (results && results.length > 0) {
+        setSearchResults(results);
+        const syncedCount = results.filter((r) => r.isSynced).length;
+        if (syncedCount > 0) {
+          setSearchStatus(`Ditemukan ${results.length} hasil lirik (${syncedCount} lirik sinkron LRC)!`);
+        } else {
+          setSearchStatus(`Ditemukan ${results.length} hasil lirik teks.`);
+        }
       } else {
-        setSearchStatus('Tidak ada lirik yang cocok di internet.');
+        setSearchStatus('Lirik belum tersedia di database online. Anda dapat mengetik atau menempel lirik manual.');
       }
-    } catch {
-      setSearchStatus('Gagal mengambil lirik online. Periksa koneksi internet.');
+    } catch (err) {
+      console.warn('Lyrics search issue:', err);
+      setSearchStatus('Server lirik sedang sibuk. Silakan coba kembali atau gunakan lirik manual.');
     } finally {
       setIsSearching(false);
     }
@@ -163,21 +139,20 @@ export const LyricsVisualView: React.FC<LyricsVisualViewProps> = ({
     searchOnlineLyrics(searchQuery);
   };
 
-  const handleApplySearchResult = (item: LrcLibResponseItem) => {
+  const handleApplySearchResult = (item: LyricsSearchResult) => {
     if (!currentTrack) return;
     playTactileClick();
 
-    if (item.syncedLyrics) {
-      const parsed = parseLRC(item.syncedLyrics);
+    if (item.syncedLyrics && item.syncedLyrics.length > 0) {
       if (onUpdateLyrics) {
-        onUpdateLyrics(currentTrack.id, item.plainLyrics, parsed);
+        onUpdateLyrics(currentTrack.id, item.plainLyrics, item.syncedLyrics);
       } else if (onUpdateTrackLyrics) {
         onUpdateTrackLyrics(currentTrack.id, {
-          syncedLyrics: parsed,
+          syncedLyrics: item.syncedLyrics,
           plainLyrics: item.plainLyrics,
         });
       }
-      setSearchStatus('Lirik sinkron (LRC) berhasil dipasang!');
+      setSearchStatus(`Lirik sinkron (LRC) "${item.trackName}" berhasil dipasang!`);
     } else if (item.plainLyrics) {
       if (onUpdateLyrics) {
         onUpdateLyrics(currentTrack.id, item.plainLyrics, undefined);
@@ -187,7 +162,7 @@ export const LyricsVisualView: React.FC<LyricsVisualViewProps> = ({
           syncedLyrics: undefined,
         });
       }
-      setSearchStatus('Lirik teks biasa berhasil dipasang!');
+      setSearchStatus(`Lirik teks "${item.trackName}" berhasil dipasang!`);
     }
 
     setSearchResults([]);
@@ -197,9 +172,9 @@ export const LyricsVisualView: React.FC<LyricsVisualViewProps> = ({
     if (!currentTrack) return;
     playTactileClick();
 
-    const isLRC = manualText.includes('[00:') || manualText.includes('[01:');
+    const isLRC = manualText.includes('[00:') || manualText.includes('[01:') || manualText.includes('[02:');
     if (isLRC) {
-      const parsed = parseLRC(manualText);
+      const parsed = parseLrc(manualText);
       if (onUpdateLyrics) {
         onUpdateLyrics(currentTrack.id, manualText, parsed);
       } else if (onUpdateTrackLyrics) {
@@ -208,6 +183,7 @@ export const LyricsVisualView: React.FC<LyricsVisualViewProps> = ({
           plainLyrics: manualText,
         });
       }
+      setSearchStatus('Lirik manual LRC berhasil disimpan!');
     } else {
       if (onUpdateLyrics) {
         onUpdateLyrics(currentTrack.id, manualText, undefined);
@@ -217,6 +193,7 @@ export const LyricsVisualView: React.FC<LyricsVisualViewProps> = ({
           syncedLyrics: undefined,
         });
       }
+      setSearchStatus('Lirik teks manual berhasil disimpan!');
     }
 
     setIsManualEditOpen(false);
@@ -340,25 +317,43 @@ export const LyricsVisualView: React.FC<LyricsVisualViewProps> = ({
 
       {/* Online Search Results List Dropdown */}
       {searchResults.length > 0 && (
-        <div className="mb-3 p-2 rounded-xl bg-slate-900/95 border border-white/20 shadow-2xl max-h-48 overflow-y-auto y2k-scrollbar space-y-1.5">
-          <p className="text-[10px] font-extrabold uppercase text-white/60 px-1">
-            Pilih hasil lirik untuk lagu ini:
-          </p>
+        <div className="mb-3 p-2.5 rounded-xl bg-slate-900/95 border border-white/20 shadow-2xl max-h-56 overflow-y-auto y2k-scrollbar space-y-1.5 animate-fadeIn">
+          <div className="flex items-center justify-between px-1 pb-1 border-b border-white/10">
+            <p className="text-[10px] font-extrabold uppercase text-white/70">
+              Pilih Versi Lirik ({searchResults.length} Ditemukan):
+            </p>
+            <button
+              onClick={() => setSearchResults([])}
+              className="text-[10px] font-bold text-white/50 hover:text-white cursor-pointer px-1.5 py-0.5 rounded hover:bg-white/10"
+            >
+              Tutup
+            </button>
+          </div>
           {searchResults.map((res) => (
             <button
               key={res.id}
               onClick={() => handleApplySearchResult(res)}
-              className="w-full text-left p-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.14] border border-white/15 transition-all flex items-center justify-between cursor-pointer"
+              className="w-full text-left p-2.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.14] border border-white/15 transition-all flex items-center justify-between gap-2 cursor-pointer group"
             >
-              <div className="min-w-0 pr-2">
-                <p className="text-xs font-bold text-white truncate">
+              <div className="min-w-0 pr-1 flex-1">
+                <p className="text-xs font-bold text-white truncate group-hover:text-white">
                   {res.trackName} - {res.artistName}
                 </p>
-                <p className="text-[10px] text-white/60 truncate">
-                  {res.albumName || 'Singel'} • {res.syncedLyrics ? '⚡ Lirik Sinkron (LRC)' : 'Teks Biasa'}
-                </p>
+                <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-white/60">
+                  <span className="truncate max-w-[120px]">{res.albumName || 'Single'}</span>
+                  <span>•</span>
+                  <span className={res.isSynced ? 'text-emerald-400 font-bold' : 'text-white/60'}>
+                    {res.isSynced ? '⚡ Lirik Sinkron (LRC)' : '📝 Teks Biasa'}
+                  </span>
+                  <span>•</span>
+                  <span className="text-white/40">{res.source}</span>
+                </div>
               </div>
-              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-white/20 text-white border border-white/30 shrink-0">
+              <span className={`text-[10px] font-black px-3 py-1 rounded-full border shrink-0 transition-all ${
+                res.isSynced 
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 group-hover:bg-emerald-500/30' 
+                  : 'bg-white/15 text-white border-white/25 group-hover:bg-white/25'
+              }`}>
                 Pilih
               </span>
             </button>

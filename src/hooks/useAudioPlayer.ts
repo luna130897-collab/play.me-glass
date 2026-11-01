@@ -129,6 +129,22 @@ export function useAudioPlayer() {
         if (storedTracks && storedTracks.length > 0) {
           // Restore audio URLs and artwork for both demo tracks and user-uploaded local audio files
           for (const track of storedTracks) {
+            // Restore cached lyrics if track doesn't have them
+            if (!track.syncedLyrics && !track.plainLyrics) {
+              try {
+                const cached = await getLyricsCache(track.id);
+                if (cached) {
+                  track.plainLyrics = cached.plainLyrics;
+                  track.syncedLyrics = cached.syncedLyrics;
+                  if (!track.lyrics && cached.plainLyrics) {
+                    track.lyrics = cached.plainLyrics.split('\n').filter(Boolean);
+                  }
+                }
+              } catch {
+                // ignore
+              }
+            }
+
             if (track.isLocal) {
               const blob = await getAudioBlob(track.id);
               let coverArt = track.coverArt;
