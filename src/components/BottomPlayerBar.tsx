@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Track, RepeatMode } from '../types';
 import { playTactileClick } from '../utils/audioSynth';
+import { generateCoverForTrack } from '../utils/coverArt';
 
 interface BottomPlayerBarProps {
   currentTrack: Track | null;
@@ -94,6 +95,9 @@ export const BottomPlayerBar: React.FC<BottomPlayerBarProps> = ({
                   src={currentTrack.coverArt}
                   alt={currentTrack.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = generateCoverForTrack(currentTrack.title, currentTrack.artist);
+                  }}
                 />
               ) : (
                 <div className="w-full h-full bg-slate-900 flex items-center justify-center text-white font-bold text-xs">

@@ -12,6 +12,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { playTactileClick } from '../utils/audioSynth';
+import { generateCoverForTrack } from '../utils/coverArt';
 
 interface LyricsVisualViewProps {
   currentTrack: Track | null;
@@ -503,6 +504,9 @@ export const LyricsVisualView: React.FC<LyricsVisualViewProps> = ({
                 src={currentTrack.coverArt}
                 alt={currentTrack.title}
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = generateCoverForTrack(currentTrack.title, currentTrack.artist);
+                }}
               />
             ) : (
               <Disc3 

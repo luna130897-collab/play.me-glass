@@ -15,6 +15,7 @@ import {
   Check
 } from 'lucide-react';
 import { playTactileClick } from '../utils/audioSynth';
+import { generateCoverForTrack } from '../utils/coverArt';
 
 interface LibraryViewProps {
   tracks: Track[];
@@ -216,7 +217,14 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 <div className="flex items-center gap-2.5 truncate">
                   <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-slate-900 border border-white/20 shadow-2xs flex items-center justify-center">
                     {track.coverArt ? (
-                      <img src={track.coverArt} alt="" className="w-full h-full object-cover" />
+                      <img 
+                        src={track.coverArt} 
+                        alt="" 
+                        className="w-full h-full object-cover" 
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = generateCoverForTrack(track.title, track.artist);
+                        }}
+                      />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center font-bold text-white">
                         ♫

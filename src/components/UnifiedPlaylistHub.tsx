@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Playlist, Track } from '../types';
 import { playTactileClick } from '../utils/audioSynth';
+import { generateCoverForTrack } from '../utils/coverArt';
 
 interface UnifiedPlaylistHubProps {
   playlists: Playlist[];
@@ -470,7 +471,14 @@ export const UnifiedPlaylistHub: React.FC<UnifiedPlaylistHubProps> = ({
                     {/* Thumbnail */}
                     <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-white/20 shadow-2xs bg-slate-900 flex items-center justify-center">
                       {track.coverArt ? (
-                        <img src={track.coverArt} alt="" className="w-full h-full object-cover" />
+                        <img 
+                          src={track.coverArt} 
+                          alt="" 
+                          className="w-full h-full object-cover" 
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = generateCoverForTrack(track.title, track.artist);
+                          }}
+                        />
                       ) : (
                         <span className="text-xs font-bold text-white">♪</span>
                       )}

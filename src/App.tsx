@@ -75,6 +75,7 @@ export default function App() {
     playNext,
     addLocalFiles,
     removeTrack,
+    updateTrackMetadata,
     updateTrackLyrics,
   } = useAudioPlayer();
 
@@ -640,6 +641,10 @@ export default function App() {
         onRemoveTrack={(id: string) => {
           handleDeleteTrackFromLibrary(id);
           setDetailTrack(null);
+        }}
+        onUpdateTrackMetadata={(trackId, updates) => {
+          updateTrackMetadata(trackId, updates);
+          setDetailTrack((prev) => (prev && prev.id === trackId ? { ...prev, ...updates } : prev));
         }}
       />
     </div>

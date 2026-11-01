@@ -11,7 +11,8 @@ import {
   SOFT_SPOT_COVER, 
   SLIPKNOT_COVER, 
   WOLFCAT_COVER, 
-  GOLDEN_HOUR_COVER 
+  GOLDEN_HOUR_COVER,
+  generateCoverForTrack 
 } from '../utils/coverArt';
 import { parseAudioMetadata } from '../utils/id3Parser';
 import { 
@@ -20,6 +21,9 @@ import {
   saveAudioBlob, 
   getAudioBlob, 
   deleteAudioBlob,
+  saveCoverArt,
+  getCoverArt,
+  deleteCoverArt,
   saveSetting,
   loadSetting,
   saveLyricsCache,
@@ -123,20 +127,40 @@ export function useAudioPlayer() {
         let resolvedTracks: Track[] = [];
 
         if (storedTracks && storedTracks.length > 0) {
-          // Restore audio URLs for both demo tracks and user-uploaded local audio files
+          // Restore audio URLs and artwork for both demo tracks and user-uploaded local audio files
           for (const track of storedTracks) {
             if (track.isLocal) {
               const blob = await getAudioBlob(track.id);
+              let coverArt = track.coverArt;
+              // If coverArt was empty or an old expired blob: URL from a previous session, restore from COVER_ARTS or fallback to generated SVG cover!
+              if (!coverArt || coverArt.startsWith('blob:')) {
+                const savedCover = await getCoverArt(track.id);
+                coverArt = savedCover || generateCoverForTrack(track.title, track.artist);
+              }
               if (blob) {
                 const blobUrl = URL.createObjectURL(blob);
-                resolvedTracks.push({ ...track, url: blobUrl });
+                resolvedTracks.push({ ...track, url: blobUrl, coverArt });
               } else {
-                resolvedTracks.push(track);
+                resolvedTracks.push({ ...track, coverArt });
               }
             } else if (demoUrls[track.id]) {
-              resolvedTracks.push({ ...track, url: demoUrls[track.id] });
+              // Ensure demo tracks also have valid cover art
+              let coverArt = track.coverArt;
+              if (!coverArt || coverArt.startsWith('blob:')) {
+                if (track.id === 'track-1') coverArt = SOFT_SPOT_COVER;
+                else if (track.id === 'track-2') coverArt = SLIPKNOT_COVER;
+                else if (track.id === 'track-3') coverArt = WOLFCAT_COVER;
+                else if (track.id === 'track-4') coverArt = GOLDEN_HOUR_COVER;
+                else coverArt = generateCoverForTrack(track.title, track.artist);
+              }
+              resolvedTracks.push({ ...track, url: demoUrls[track.id], coverArt });
             } else {
-              resolvedTracks.push(track);
+              let coverArt = track.coverArt;
+              if (!coverArt || coverArt.startsWith('blob:')) {
+                const savedCover = await getCoverArt(track.id);
+                coverArt = savedCover || generateCoverForTrack(track.title, track.artist);
+              }
+              resolvedTracks.push({ ...track, coverArt });
             }
           }
         } else {
@@ -591,7 +615,7 @@ export function useAudioPlayer() {
     );
   }, []);
 
-  // Add Local Files with ID3 extraction AND persistent IndexedDB storage
+  // Add Local Files with ID3/FLAC/M4A extraction AND persistent IndexedDB storage
   const addLocalFiles = useCallback(async (files: FileList | File[]) => {
     playTactileClick();
     const fileArray = Array.from(files);
@@ -600,8 +624,8 @@ export function useAudioPlayer() {
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
       let title = file.name.replace(/\.[^/.]+$/, '');
-      let artist = 'Local Artist';
-      let album = 'Memori Internal / Unduhan';
+      let artist = 'Artis Lokal';
+      let album = 'Memori Perangkat';
 
       if (title.includes(' - ')) {
         const parts = title.split(' - ');
@@ -610,19 +634,31 @@ export function useAudioPlayer() {
       }
 
       let coverArtUrl = '';
+      let embeddedLyrics = '';
+      let detectedDuration = 180;
+      let detectedGenre = '';
+
       try {
         const meta = await parseAudioMetadata(file);
         if (meta.title) title = meta.title;
         if (meta.artist) artist = meta.artist;
         if (meta.album) album = meta.album;
         if (meta.coverArtUrl) coverArtUrl = meta.coverArtUrl;
+        if (meta.lyrics) embeddedLyrics = meta.lyrics;
+        if (meta.duration && meta.duration > 0) detectedDuration = meta.duration;
+        if (meta.genre) detectedGenre = meta.genre;
       } catch (err) {
-        console.warn('ID3 parse skipped:', err);
+        console.warn('Metadata parse skipped:', err);
+      }
+
+      // If no embedded artwork in the file, generate a distinctive aesthetic SVG artwork
+      if (!coverArtUrl) {
+        coverArtUrl = generateCoverForTrack(title, artist);
       }
 
       const fileUrl = URL.createObjectURL(file);
       const now = new Date();
-      const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+      const dateStr = now.toLocaleDateString('id-ID', { month: 'short', day: '2-digit', year: 'numeric' });
       const ext = file.name.split('.').pop()?.toUpperCase() || 'AUDIO';
       const sizeMb = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
       const trackId = `local-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 7)}`;
@@ -630,26 +666,30 @@ export function useAudioPlayer() {
       // Save raw audio blob in IndexedDB permanently!
       await saveAudioBlob(trackId, file, file.name, file.type || 'audio/mpeg');
 
+      // Save cover art in IndexedDB permanently!
+      await saveCoverArt(trackId, coverArtUrl);
+
       newTracks.push({
         id: trackId,
         title: title || file.name,
         artist: artist,
         album: album,
         dateAdded: dateStr,
-        duration: 180,
+        duration: detectedDuration,
         url: fileUrl,
         coverArt: coverArtUrl,
         isLocal: true,
         isLiked: false,
         format: `${ext} Offline`,
-        bitrate: '320 kbps',
+        bitrate: detectedGenre ? `${detectedGenre} • 320 kbps` : '320 kbps',
         fileSize: sizeMb,
-        lyrics: [
+        plainLyrics: embeddedLyrics || undefined,
+        lyrics: embeddedLyrics ? embeddedLyrics.split('\n').filter(Boolean) : [
           '♪ Memutar berkas audio lokal dari perangkat',
           `Berkas: ${file.name}`,
           `Artis: ${artist} • Album: ${album}`,
           `Format: ${ext} • Ukuran: ${sizeMb}`,
-          'Audio tersimpan permanen di penyimpanan lokal aplikasi',
+          'Audio dan artwork tersimpan permanen di memori aplikasi',
         ],
       });
     }
@@ -663,10 +703,29 @@ export function useAudioPlayer() {
     }
   }, []);
 
+  // Update track metadata or cover permanently
+  const updateTrackMetadata = useCallback(async (trackId: string, updates: Partial<Track>) => {
+    playTactileClick();
+    setAllTracks((prev) => {
+      const updated = prev.map((t) => (t.id === trackId ? { ...t, ...updates } : t));
+      saveTracks(updated);
+      return updated;
+    });
+    setActiveQueue((prev) =>
+      prev.map((t) => (t.id === trackId ? { ...t, ...updates } : t))
+    );
+    if (updates.coverArt) {
+      await saveCoverArt(trackId, updates.coverArt);
+    }
+  }, []);
+
   // Remove track with persistent deletion
   const removeTrack = useCallback(async (id: string) => {
     playTactileClick();
-    await deleteAudioBlob(id);
+    await Promise.all([
+      deleteAudioBlob(id),
+      deleteCoverArt(id),
+    ]);
 
     setAllTracks((prev) => {
       const updated = prev.filter((t) => t.id !== id);
@@ -772,6 +831,7 @@ export function useAudioPlayer() {
     playNext,
     addLocalFiles,
     removeTrack,
+    updateTrackMetadata,
     updateTrackLyrics,
   };
 }

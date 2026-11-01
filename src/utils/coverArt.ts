@@ -81,3 +81,61 @@ export const GOLDEN_HOUR_COVER = `data:image/svg+xml;utf8,${encodeURIComponent(`
 
 // Backwards compatibility alias
 export const FRIENDLY_SEX_COVER = GOLDEN_HOUR_COVER;
+
+/**
+ * Generate a distinctive aesthetic SVG cover artwork for tracks without embedded covers.
+ * Uses deterministic palette generation based on the title and artist string.
+ */
+export function generateCoverForTrack(title: string, artist: string): string {
+  const seed = (title + artist).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  
+  const gradients = [
+    { from: '#1e1b4b', mid: '#312e81', to: '#4338ca', accent: '#a5b4fc', ring: '#818cf8' },
+    { from: '#18181b', mid: '#27272a', to: '#3f3f46', accent: '#f43f5e', ring: '#fb7185' },
+    { from: '#022c22', mid: '#064e3b', to: '#047857', accent: '#34d399', ring: '#6ee7b7' },
+    { from: '#1e293b', mid: '#334155', to: '#475569', accent: '#38bdf8', ring: '#7dd3fc' },
+    { from: '#3b0764', mid: '#581c87', to: '#7e22ce', accent: '#e879f9', ring: '#f0abfc' },
+    { from: '#451a03', mid: '#78350f', to: '#b45309', accent: '#fbbf24', ring: '#fde68a' },
+  ];
+
+  const palette = gradients[seed % gradients.length];
+  const initial = (title.trim()[0] || '♪').toUpperCase();
+  const safeTitle = (title.length > 14 ? title.substring(0, 14) + '..' : title).toUpperCase();
+  const safeArtist = (artist.length > 16 ? artist.substring(0, 16) + '..' : artist).toUpperCase();
+
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad_${seed}" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${palette.from}" />
+      <stop offset="50%" stop-color="${palette.mid}" />
+      <stop offset="100%" stop-color="${palette.to}" />
+    </linearGradient>
+    <radialGradient id="vinylGlow_${seed}" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="${palette.accent}" stop-opacity="0.35" />
+      <stop offset="60%" stop-color="${palette.ring}" stop-opacity="0.1" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.7" />
+    </radialGradient>
+  </defs>
+  <rect width="120" height="120" fill="url(#bgGrad_${seed})" rx="8" />
+  
+  <!-- Vinyl Rings -->
+  <circle cx="60" cy="52" r="38" fill="none" stroke="url(#vinylGlow_${seed})" stroke-width="6" />
+  <circle cx="60" cy="52" r="30" fill="none" stroke="#ffffff" stroke-opacity="0.1" stroke-width="1.2" />
+  <circle cx="60" cy="52" r="22" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="1" />
+  <circle cx="60" cy="52" r="14" fill="#09090b" stroke="${palette.ring}" stroke-width="1.5" />
+  <circle cx="60" cy="52" r="4" fill="${palette.accent}" />
+
+  <!-- Center Initial / Icon -->
+  <text x="60" y="56" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="11" fill="#ffffff" font-weight="900" text-anchor="middle">${initial}</text>
+
+  <!-- Bottom Glass Badge -->
+  <rect x="10" y="94" width="100" height="20" rx="4" fill="#000000" fill-opacity="0.6" stroke="#ffffff" stroke-opacity="0.15" stroke-width="0.75" />
+  <text x="60" y="103" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="5.5" fill="#ffffff" font-weight="800" text-anchor="middle" letter-spacing="0.5">${safeTitle}</text>
+  <text x="60" y="110" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="4.5" fill="${palette.accent}" font-weight="600" text-anchor="middle" letter-spacing="0.3">${safeArtist}</text>
+</svg>
+  `.trim();
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
